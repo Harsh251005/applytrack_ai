@@ -10,4 +10,7 @@ class Settings:
     GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH")
     GOOGLE_TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH")
 
+    SPREADSHEET_ID: str = os.getenv("SPREADSHEET_ID")
+    SPREADSHEET_URL: str = os.getenv("SPREADSHEET_URL")
+
 settings = Settings()
