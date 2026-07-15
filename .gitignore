@@ -129,3 +129,8 @@ temp/
 generated/
 outputs/
 reports/
+
+# =========================
+# Credentials
+# =========================
+credentials/
