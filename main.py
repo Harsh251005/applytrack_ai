@@ -1,10 +1,24 @@
-from langchain_openai import ChatOpenAI
-from src.config.settings import settings
+from src.agent.tracker import tracker_agent
+import pyfiglet
+import asyncio
 
-llm = ChatOpenAI(
-    model=settings.OPENAI_MODEL_NAME,
-    api_key=settings.OPENAI_API_KEY
-)
+async def main():
 
-result = llm.invoke("Reply 'test successful'")
-print(result)
+    # Create a font layout
+    # The font used in your example is called 'big'
+    banner_art = pyfiglet.figlet_format("ApplyTrack AI", font="big")
+
+    print(f"\n{banner_art}\n\n")
+
+    while True:
+
+        user_input = input("\nEnter the task: ")
+
+        if user_input.lower() == "exit" or user_input.lower() == "quit":
+            print("GoodBye!")
+            break
+
+        await tracker_agent(user_input)
+
+if __name__ == "__main__":
+    asyncio.run(main())
