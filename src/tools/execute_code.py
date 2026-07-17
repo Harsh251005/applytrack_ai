@@ -84,6 +84,8 @@ def make_execute_code_tool(get_active_spreadsheet_id):
         tables, charts, or dashboard-building tasks not covered by the other
         sheet tools."""
 
+        print("Executing code")
+
         spreadsheet_id = get_active_spreadsheet_id()
         if not spreadsheet_id:
             return "Error: no spreadsheet is currently open. Call open_spreadsheet first."

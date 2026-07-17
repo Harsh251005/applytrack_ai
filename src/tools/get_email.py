@@ -15,7 +15,7 @@ def get_email_impl(email_id: str) -> dict:
 
     service = get_gmail_service()
 
-    print(f"[TOOL] Getting email: {email_id}")
+    print(f"Getting email: {email_id}")
 
     message = (
         service.users()

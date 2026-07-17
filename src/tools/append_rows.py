@@ -20,7 +20,7 @@ def append_rows(
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Appending row to {sheet_name}")
+    print(f"Appending row to {sheet_name}")
 
     result = (
         service.spreadsheets()

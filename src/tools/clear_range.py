@@ -21,7 +21,7 @@ def clear_range(
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Clearing range in {sheet_name} from {start_cell} to {end_cell}")
+    print(f"Clearing range in {sheet_name} from {start_cell} to {end_cell}")
 
     range_name = f"{sheet_name}!{start_cell}:{end_cell}"
 

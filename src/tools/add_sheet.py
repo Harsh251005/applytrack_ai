@@ -18,7 +18,7 @@ def add_sheet(
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Adding new sheet {sheet_name}")
+    print(f"Adding new sheet {sheet_name}")
 
     result = (
         service.spreadsheets()

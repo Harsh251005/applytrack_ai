@@ -57,7 +57,7 @@ def read_formatting(
     By default, only explicitly set formatting is returned to minimize tokens.
     """
 
-    print("[TOOL] READ FORMATTING TOOL")
+    print(f"Reading formatting in {sheet_name} from range {cell_range}")
 
     creds = authenticate()
     service = build("sheets", "v4", credentials=creds)

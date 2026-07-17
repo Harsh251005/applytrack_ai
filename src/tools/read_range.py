@@ -17,7 +17,7 @@ def read_range(
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Getting values from range {range_name}")
+    print(f"Reading values from range {range_name}")
 
     result = (
         service.spreadsheets()

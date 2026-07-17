@@ -26,6 +26,8 @@ def update_application_from_email(
     Only the fields provided (non-None) are updated.
     """
 
+    print(f"Updating {sheet_name} from email")
+
     service = get_sheets_service()
 
     updates = {

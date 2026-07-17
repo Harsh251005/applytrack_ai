@@ -14,6 +14,8 @@ def check_for_application_updates(
     Finds recent emails that may contain job application updates.
     """
 
+    print("Checking for application updates")
+
     results = search_emails_impl(
         query=(
             f"newer_than:{days}d "

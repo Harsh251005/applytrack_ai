@@ -11,6 +11,8 @@ def rename_spreadsheet(
     Rename a Google Spreadsheet.
     """
 
+    print(f"Renaming spreadsheet to {new_name}")
+
     from authentication.google_auth import authenticate
 
     creds = authenticate()

@@ -22,7 +22,7 @@ def write_range(
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Writing values in {sheet_name}")
+    print(f"Writing values in {sheet_name}")
 
     range_name = f"{sheet_name}!{start_cell}"
 

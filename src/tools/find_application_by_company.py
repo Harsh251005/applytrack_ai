@@ -20,6 +20,8 @@ def find_application_by_company(
         company_name: Company to search for.
     """
 
+    print(f"Searching for {company_name} applications in {sheet_name}")
+
     service = get_sheets_service()
 
     result = (

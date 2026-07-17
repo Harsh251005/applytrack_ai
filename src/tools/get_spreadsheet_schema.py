@@ -9,7 +9,7 @@ async def get_spreadsheet_schema_impl(spreadsheet_id: str) -> dict:
     """
     service = get_sheets_service()
 
-    print(f"[TOOL] Getting schema for spreadsheet {spreadsheet_id}")
+    print(f"Getting schema for spreadsheet {spreadsheet_id}")
 
     # Get spreadsheet metadata (title + all sheet names)
     spreadsheet = (

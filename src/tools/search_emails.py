@@ -22,7 +22,7 @@ def search_emails_impl(
 
     service = get_gmail_service()
 
-    print(f"[TOOL] Searching Gmail: {query}")
+    print(f"Searching Gmail for {query}")
 
     response = (
         service.users()
