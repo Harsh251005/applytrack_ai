@@ -1,8 +1,8 @@
-from langchain.tools import tool
-from tools.sheets_service import get_sheets_service
+from agents import function_tool
+from src.tools.sheets_service import get_sheets_service
 
 
-@tool
+@function_tool
 def read_range(
     spreadsheet_id: str,
     range_name: str,

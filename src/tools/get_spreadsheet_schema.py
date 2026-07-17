@@ -1,8 +1,8 @@
-from tools.sheets_service import get_sheets_service
-from langchain.tools import tool
+from src.tools.sheets_service import get_sheets_service
+from agents import function_tool
 
-@tool
-def get_spreadsheet_schema(spreadsheet_id: str) -> dict:
+
+async def get_spreadsheet_schema_impl(spreadsheet_id: str) -> dict:
     """
     Returns the schema of a Google Spreadsheet — sheet names, headers,
     and row/column counts. Call this before writing to avoid hallucinations.
@@ -54,3 +54,8 @@ def get_spreadsheet_schema(spreadsheet_id: str) -> dict:
         "number_of_sheets": len(sheets_info),
         "sheets": sheets_info,
     }
+
+@function_tool
+async def get_spreadsheet_schema(spreadsheet_id: str) -> dict:
+    """Get the current worksheet/tab layout and column structure of the spreadsheet."""
+    return await get_spreadsheet_schema_impl(spreadsheet_id)

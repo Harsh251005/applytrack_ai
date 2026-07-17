@@ -1,7 +1,7 @@
 import webbrowser
-from langchain.tools import tool
+from agents import function_tool
 
-@tool
+@function_tool
 def open_spreadsheet(spreadsheet_url: str) -> dict:
     """
     Opens a Google Spreadsheet in the user's default browser.

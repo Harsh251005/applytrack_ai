@@ -1,8 +1,8 @@
-from langchain.tools import tool
+from agents import function_tool
 from googleapiclient.discovery import build
 
 
-@tool
+@function_tool
 def rename_spreadsheet(
     spreadsheet_id: str,
     new_name: str,

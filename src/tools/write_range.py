@@ -1,9 +1,9 @@
 from typing import List
-from langchain.tools import tool
-from tools.sheets_service import get_sheets_service
+from agents import function_tool
+from src.tools.sheets_service import get_sheets_service
 
 
-@tool
+@function_tool
 def write_range(
     spreadsheet_id: str,
     sheet_name: str,
