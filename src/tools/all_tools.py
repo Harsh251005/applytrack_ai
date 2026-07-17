@@ -8,6 +8,7 @@ from src.tools.read_range import read_range
 from src.tools.rename_spreadsheet import rename_spreadsheet
 from src.tools.write_range import write_range
 from src.tools.execute_code import make_execute_code_tool
+from src.tools.delete_sheet import delete_sheet
 
 execute_code = make_execute_code_tool(lambda: settings.SPREADSHEET_ID)
 
@@ -20,5 +21,6 @@ TOOLS = [
     read_range,
     rename_spreadsheet,
     write_range,
-    execute_code
+    execute_code,
+    delete_sheet
 ]
