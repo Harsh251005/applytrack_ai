@@ -19,8 +19,8 @@ import traceback
 from pydantic import BaseModel, Field
 from agents import function_tool
 
-from src.tools.sheets_service import get_sheets_service
-from src.tools.drive_service import get_drive_service
+from src.services.sheets_service import get_sheets_service
+from src.services.drive_service import get_drive_service
 
 
 class ExecuteCodeInput(BaseModel):

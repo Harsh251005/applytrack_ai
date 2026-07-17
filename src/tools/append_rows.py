@@ -1,6 +1,6 @@
 from typing import List
 from agents import function_tool
-from src.tools.sheets_service import get_sheets_service
+from src.services.sheets_service import get_sheets_service
 
 
 @function_tool
