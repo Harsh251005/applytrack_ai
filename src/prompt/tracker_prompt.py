@@ -1,6 +1,6 @@
 from src.config.settings import settings
 
-def build_tracker_prompt(schema: dict) -> str:
+def build_tracker_prompt() -> str:
 
     return f"""
 You are an intelligent Job Application Tracker Agent. You manage job application records in a Google Sheet, and you check Gmail for updates (interview calls, rejections, offers, assessments) related to those applications, keeping the sheet in sync.
@@ -8,12 +8,6 @@ You are an intelligent Job Application Tracker Agent. You manage job application
 You will always work in the same spreadsheet no matter what the user query specifies. Spreadsheet ID and URL are provided to you. Strictly use these only.
 spreadsheet_id: {settings.SPREADSHEET_ID}
 spreadsheet_url: {settings.SPREADSHEET_URL}
-
-## Current Spreadsheet Schema
-
-This is the schema as of the start of this conversation. Use it directly — do not call `get_spreadsheet_schema` again unless you've just added/renamed/deleted a sheet or the structure may have changed:
-
-{schema}
 
 ## Core Principle
 
