@@ -1,21 +1,9 @@
-"""
-ApplyTrack AI — Streamlit chat UI for the tracker agent.
-
-Structure:
-    1. Page config + theme (CSS)
-    2. Thread-aware stdout capture      <- makes the "live agent log" safe for many concurrent users
-    3. Sidebar (branding)
-    4. Session state
-    5. Chat rendering
-    6. Agent execution + live status
-    7. Chat input handling
-"""
-
 import sys
+import html
 import time
 import queue
 import asyncio
-import textwrap
+import contextvars
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,240 +11,313 @@ import streamlit as st
 from src.agent.tracker import tracker_agent
 
 # ==================================================================
-# 1. Page config
+# 1. Page Config & Modern UI Theme
 # ==================================================================
 st.set_page_config(
     page_title="ApplyTrack AI",
     page_icon="🎯",
     layout="centered",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed"
 )
 
-st.html(
-    textwrap.dedent(
-        """
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-        <style>
-        :root {
-            --ink: #0A0D16;
-            --ink-2: #12172A;
-            --cyan: #22D3EE;
-            --violet: #8B5CF6;
-            --amber: #F59E0B;
-            --text: #E7EAF3;
-            --muted: #7C87A6;
-        }
+# Hide sidebar entirely and inject stunning modern CSS
+st.html("""
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+    /* Global Variables */
+    :root {
+        --bg-color: #0d0f19;
+        --brand-blue: #0072ff;
+        --brand-cyan: #00c6ff;
+        --brand-pink: #f857a6;
+        --glass-bg: rgba(255, 255, 255, 0.05);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --text-main: #e2e8f0;
+        --text-muted: #94a3b8;
+    }
 
-        .stApp {
-            background:
-                radial-gradient(circle at 15% 8%, rgba(139,92,246,0.16), transparent 42%),
-                radial-gradient(circle at 85% 15%, rgba(34,211,238,0.14), transparent 45%),
-                radial-gradient(circle at 50% 100%, rgba(245,158,11,0.07), transparent 50%),
-                var(--ink);
-            font-family: 'Inter', sans-serif;
-        }
+    /* Animated Background */
+    .stApp {
+        background-color: var(--bg-color);
+        background-image: 
+            radial-gradient(circle at 10% 20%, rgba(0, 198, 255, 0.1) 0%, transparent 40%),
+            radial-gradient(circle at 90% 80%, rgba(248, 87, 166, 0.1) 0%, transparent 40%);
+        background-attachment: fixed;
+        font-family: 'Outfit', sans-serif !important;
+        color: var(--text-main);
+    }
 
-        #MainMenu, header, footer {visibility: hidden;}
+    /* Hide unnecessary UI */
+    [data-testid="collapsedControl"], #MainMenu, footer, header { display: none !important; }
 
-        /* ---------- Sidebar branding ---------- */
-        section[data-testid="stSidebar"] {
-            background: var(--ink-2);
-            border-right: 1px solid rgba(255,255,255,0.06);
-        }
-        .brand {
-            padding: 0.4rem 0 1.2rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 1rem;
-        }
-        .brand .logo-row {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .brand .logo-row span.icon { font-size: 1.4rem; }
-        .brand h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin: 0;
-            background: linear-gradient(100deg, var(--cyan), var(--violet) 45%, var(--amber) 85%);
-            background-size: 220% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: sheen 7s ease-in-out infinite;
-        }
-        .brand p {
-            color: var(--muted);
-            font-size: 0.78rem;
-            margin: 0.3rem 0 0 0;
-        }
-        @keyframes sheen {
-            0%   { background-position: 0% 50%; }
-            50%  { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
+    .block-container {
+        padding-top: 3rem !important;
+        padding-bottom: 8rem !important; /* Space for input */
+        max-width: 800px;
+    }
 
-        /* ---------- Chat bubbles ---------- */
-        [data-testid="stChatMessage"] {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 14px;
-            padding: 0.55rem 0.3rem;
-            animation: rise 0.35s ease both;
-        }
-        @keyframes rise {
-            from { opacity: 0; transform: translateY(10px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
+    /* ---------- Animated Logo & Header ---------- */
+    .header-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding-bottom: 2.5rem;
+        animation: fadeIn 1s ease-out;
+        text-align: center;
+    }
 
-        /* ---------- Chat input ---------- */
-        .stChatInput {
-            padding-top: 0.4rem;
-        }
-        .stChatInput textarea {
-            border-radius: 16px !important;
-            border: 1px solid rgba(139,92,246,0.30) !important;
-            background: rgba(255,255,255,0.035) !important;
-            padding: 0.85rem 1rem !important;
-            font-size: 0.95rem !important;
-            color: var(--text) !important;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }
-        .stChatInput textarea::placeholder {
-            color: var(--muted) !important;
-        }
-        .stChatInput textarea:focus {
-            border-color: var(--cyan) !important;
-            box-shadow: 0 0 0 3px rgba(34,211,238,0.15) !important;
-        }
+    .logo-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+    }
 
-        /* ---------- Buttons (clear + suggestion chips) ---------- */
-        .stButton > button {
-            border-radius: 999px !important;
-            border: 1px solid rgba(255,255,255,0.12) !important;
-            background: rgba(255,255,255,0.04) !important;
-            color: var(--text) !important;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.78rem !important;
-            padding: 0.35rem 0.9rem !important;
-            transition: all 0.15s ease;
-        }
-        .stButton > button:hover {
-            border-color: var(--cyan) !important;
-            color: var(--cyan) !important;
-            transform: translateY(-1px);
-        }
+    .target-icon {
+        font-size: 2.8rem;
+        animation: pulseLogo 2.5s infinite;
+        filter: drop-shadow(0 0 10px rgba(0, 198, 255, 0.6));
+    }
 
-        /* ---------- Live agent status (real stdout, not a canned loop) ---------- */
-        .radar-wrap {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.9rem;
-            padding: 0.7rem 1rem;
-            background: rgba(139,92,246,0.06);
-            border: 1px solid rgba(139,92,246,0.25);
-            border-radius: 14px;
-            margin-top: 0.3rem;
-        }
-        .radar {
-            position: relative;
-            width: 34px;
-            height: 34px;
-            flex-shrink: 0;
-            margin-top: 2px;
-        }
-        .radar .core {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 8px; height: 8px;
-            margin: -4px 0 0 -4px;
-            border-radius: 50%;
-            background: var(--violet);
-            box-shadow: 0 0 8px var(--violet);
-        }
-        .radar .ring {
-            position: absolute;
-            top: 50%; left: 50%;
-            width: 8px; height: 8px;
-            margin: -4px 0 0 -4px;
-            border-radius: 50%;
-            border: 1.5px solid var(--violet);
-            opacity: 0;
-            animation: pulse 1.8s ease-out infinite;
-        }
-        .radar .ring:nth-child(2) { animation-delay: 0.6s; }
-        .radar .ring:nth-child(3) { animation-delay: 1.2s; }
-        @keyframes pulse {
-            0%   { width: 8px; height: 8px; margin: -4px 0 0 -4px; opacity: 0.8; }
-            100% { width: 34px; height: 34px; margin: -17px 0 0 -17px; opacity: 0; }
-        }
-        .radar-log-block {
-            display: flex;
-            flex-direction: column;
-            gap: 0.15rem;
-        }
-        .radar-log-dim {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.76rem;
-            color: var(--muted);
-            opacity: 0.6;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .radar-log {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.82rem;
-            color: var(--cyan);
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        .radar-log .cursor {
-            display: inline-block;
-            width: 6px; height: 1em;
-            background: var(--cyan);
-            margin-left: 2px;
-            vertical-align: text-bottom;
-            animation: blink 0.9s step-end infinite;
-        }
-        @keyframes blink { 50% { opacity: 0; } }
+    .brand-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+        background: linear-gradient(to right, var(--brand-cyan), var(--brand-blue), var(--brand-pink), var(--brand-cyan));
+        background-size: 300% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: textShine 5s linear infinite;
+    }
 
-        /* ---------- Empty state ---------- */
-        .empty-hint {
-            text-align: center;
-            color: var(--muted);
-            font-size: 0.88rem;
-            padding: 1.2rem 0 0.4rem 0;
-        }
-        </style>
-        """
-    )
-)
+    .brand-subtitle {
+        color: var(--text-muted);
+        font-size: 1rem;
+        margin-top: 5px;
+        font-weight: 400;
+    }
+
+    /* ---------- Chat Layout & Bubbles ---------- */
+    /* Base Container Rule */
+    div[class*="st-key-bubble-"], div[class*="st-key-terminal-wrapper"] {
+        width: 100%;
+        max-width: 85%;
+        clear: both;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Common layout for text vertical centering */
+    div[class*="st-key-bubble-user-"] > div, 
+    div[class*="st-key-bubble-assistant-"] > div {
+        display: flex;
+        align-items: center; /* PERFECT VERTICAL CENTERING */
+        min-height: 48px; 
+    }
+
+    /* User Bubble (Pushed to Right) */
+    div[class*="st-key-bubble-user-"] {
+        margin-left: auto !important;
+        margin-right: 0 !important;
+        align-items: flex-end;
+    }
+
+    div[class*="st-key-bubble-user-"] > div {
+        background: linear-gradient(135deg, var(--brand-cyan), var(--brand-blue));
+        border-radius: 20px 20px 4px 20px;
+        padding: 10px 20px 20px 20px;
+        margin-bottom: 15px;
+        color: white !important;
+        box-shadow: 0 8px 20px rgba(0, 114, 255, 0.25);
+        animation: slideInRight 0.4s cubic-bezier(0.25, 0.8, 0.2, 1) forwards;
+        transform-origin: bottom right;
+        text-align: left;
+        width: fit-content;
+    }
+    div[class*="st-key-bubble-user-"] p { margin: 0; color: white !important; font-size: 1.05rem;}
+
+    /* Assistant Bubble (Pushed to Left) */
+    div[class*="st-key-bubble-assistant-"], div[class*="st-key-terminal-wrapper"] {
+        margin-right: auto !important;
+        margin-left: 0 !important;
+        align-items: flex-start;
+    }
+
+    div[class*="st-key-bubble-assistant-"] > div {
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+        border-radius: 20px 20px 20px 4px;
+        padding: 10px 20px 20px 20px;
+        margin-bottom: 15px;
+        color: var(--text-main) !important;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        animation: slideInLeft 0.4s cubic-bezier(0.25, 0.8, 0.2, 1) forwards;
+        transform-origin: bottom left;
+        text-align: left;
+        width: fit-content;
+    }
+    div[class*="st-key-bubble-assistant-"] p { margin: 0; font-size: 1.05rem; color: var(--text-main) !important;}
+
+    /* ---------- Chat Input Container ---------- */
+    [data-testid="stChatInput"] {
+        background: transparent !important;
+        padding-bottom: 1rem;
+    }
+    [data-testid="stChatInput"] textarea {
+        border-radius: 24px !important;
+        border: 1px solid var(--glass-border) !important;
+        background: rgba(20, 24, 39, 0.8) !important;
+        backdrop-filter: blur(10px);
+        color: white !important;
+        padding: 1rem 1.2rem !important;
+        font-size: 1rem !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+        transition: all 0.3s ease;
+    }
+    [data-testid="stChatInput"] textarea:focus {
+        border-color: var(--brand-cyan) !important;
+        box-shadow: 0 0 0 2px rgba(0, 198, 255, 0.2) !important;
+    }
+    [data-testid="stChatInput"] button {
+        background: var(--brand-blue) !important;
+        border-radius: 50% !important;
+        transition: transform 0.2s ease !important;
+    }
+    [data-testid="stChatInput"] button:hover {
+        transform: scale(1.1);
+        background: var(--brand-cyan) !important;
+    }
+
+    /* ---------- Floating Clear Button (Top Right) ---------- */
+    div[class*="st-key-clear-btn-container"] {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: auto;
+        z-index: 1000;
+        animation: fadeIn 1s ease-out;
+    }
+
+    div[class*="st-key-clear-btn-container"] button {
+        border-radius: 30px !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: rgba(10, 13, 22, 0.5) !important;
+        backdrop-filter: blur(8px);
+        color: var(--text-muted) !important;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.85rem !important;
+        padding: 0.3rem 0.8rem !important;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+
+    div[class*="st-key-clear-btn-container"] button:hover {
+        border-color: var(--brand-pink) !important;
+        color: white !important;
+        box-shadow: 0 0 15px rgba(248, 87, 166, 0.4) !important;
+        transform: translateY(-2px);
+    }
+
+    /* ---------- Live Terminal Box ---------- */
+    .terminal-box {
+        background: rgba(10, 13, 22, 0.85);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        margin-bottom: 15px;
+        width: 100%;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 198, 255, 0.1);
+        animation: fadeIn 0.4s ease-out, borderPulse 2s infinite;
+        text-align: left;
+    }
+    .terminal-header {
+        background: rgba(255,255,255,0.03);
+        padding: 8px 12px;
+        display: flex;
+        gap: 6px;
+        border-bottom: 1px solid var(--glass-border);
+    }
+    .mac-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .mac-dot.red { background: #ff5f56; }
+    .mac-dot.yellow { background: #ffbd2e; }
+    .mac-dot.green { background: #27c93f; }
+
+    .terminal-body {
+        padding: 12px;
+        max-height: 250px;
+        overflow-y: auto;
+        font-family: 'Fira Code', monospace;
+        font-size: 0.85rem;
+        color: var(--brand-cyan);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        text-align: left;
+    }
+    .terminal-line {
+        line-height: 1.4;
+        word-break: break-all;
+        text-align: left;
+    }
+    .terminal-cursor {
+        display: inline-block;
+        width: 8px; height: 1em;
+        background: var(--brand-pink);
+        vertical-align: middle;
+        animation: blink 1s step-end infinite;
+    }
+
+    /* ---------- Animations ---------- */
+    @keyframes pulseLogo {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.8; }
+    }
+    @keyframes borderPulse {
+        0%, 100% { border-color: rgba(255, 255, 255, 0.1); }
+        50% { border-color: rgba(0, 198, 255, 0.4); }
+    }
+    @keyframes textShine {
+        0% { background-position: 0% center; }
+        100% { background-position: -300% center; }
+    }
+    @keyframes slideInRight {
+        0% { opacity: 0; transform: translateX(30px) scale(0.95); }
+        100% { opacity: 1; transform: translateX(0) scale(1); }
+    }
+    @keyframes slideInLeft {
+        0% { opacity: 0; transform: translateX(-30px) scale(0.95); }
+        100% { opacity: 1; transform: translateX(0) scale(1); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Scrollbar styling for terminal */
+    .terminal-body::-webkit-scrollbar { width: 6px; }
+    .terminal-body::-webkit-scrollbar-track { background: transparent; }
+    .terminal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+</style>
+""")
 
 # ==================================================================
-# 2. Thread-aware stdout capture
-#
-# Streamlit runs every user's session in the same process (different
-# threads). We can't just do `sys.stdout = some_queue` — that would
-# leak one user's agent logs into every other user's browser.
-#
-# Instead we install ONE proxy, once, for the whole process. It looks
-# up the CURRENT thread's id in a registry to find where that
-# specific agent run's output should go. Any print() from code that
-# isn't a tracked agent run (or that spawns its own thread) just
-# falls through to the real terminal, unchanged.
+# 2. Context-aware Stdout Capture (For Live Terminal)
 # ==================================================================
 _real_stdout = sys.stdout
-_log_registry: dict[int, "queue.Queue[str]"] = {}
-_registry_lock = threading.Lock()
+# Create a context variable to hold the queue
+_log_queue_var = contextvars.ContextVar("log_queue", default=None)
 
 
-class _ThreadAwareStdout:
+class _ContextAwareStdout:
     def write(self, text: str) -> int:
-        q = None
-        with _registry_lock:
-            q = _log_registry.get(threading.get_ident())
+        # Retrieve the queue from the current async context
+        q = _log_queue_var.get()
+
         if q is not None:
             if text.strip():
                 q.put(text)
@@ -268,152 +329,128 @@ class _ThreadAwareStdout:
         _real_stdout.flush()
 
 
-if not isinstance(sys.stdout, _ThreadAwareStdout):
-    sys.stdout = _ThreadAwareStdout()
+if not isinstance(sys.stdout, _ContextAwareStdout):
+    sys.stdout = _ContextAwareStdout()
 
 
-def run_agent_with_live_log(prompt: str, log_queue: "queue.Queue[str]") -> str:
-    """Runs the agent on this thread, capturing its own prints into log_queue.
-
-    Registered/unregistered by thread id, so concurrent users never see
-    each other's logs, even though sys.stdout is shared process-wide.
-    """
-    tid = threading.get_ident()
-    with _registry_lock:
-        _log_registry[tid] = log_queue
+def run_agent_with_live_log(prompt: str, log_queue: queue.Queue) -> str:
+    # Set the queue in the context variable.
+    # This automatically propagates to all child asyncio tasks!
+    token = _log_queue_var.set(log_queue)
     try:
+        # Calls your Langchain/Pydantic tracker agent
         return asyncio.run(tracker_agent(prompt))
+    except Exception as e:
+        return f"Agent Error: {str(e)}"
     finally:
-        with _registry_lock:
-            _log_registry.pop(tid, None)
+        # Clean up the context variable when done
+        _log_queue_var.reset(token)
 
 
 # ==================================================================
-# 3. Sidebar — branding lives here now, main screen stays task-only
+# 3. Header & Floating Utilities
 # ==================================================================
-with st.sidebar:
-    st.markdown(
-        textwrap.dedent(
-            """
-            <div class="brand">
-                <div class="logo-row">
-                    <span class="icon">🎯</span>
-                    <h1>ApplyTrack AI</h1>
-                </div>
-                <p>Mission control for your job hunt.</p>
-            </div>
-            """
-        ),
-        unsafe_allow_html=True,
-    )
-    if st.button("🗑️ Clear conversation", use_container_width=True):
+st.html("""
+<div class="header-container">
+    <div class="logo-wrapper">
+        <span class="target-icon">🎯</span>
+        <h1 class="brand-title">ApplyTrack AI</h1>
+    </div>
+    <p class="brand-subtitle">Automating your job hunt sheet, intelligently.</p>
+</div>
+""")
+
+# Floating Clear Button placed nicely at top-right
+with st.container(key="clear-btn-container"):
+    if st.button("🗑️ Clear Chat", use_container_width=False):
         st.session_state.messages = []
         st.rerun()
 
 # ==================================================================
-# 4. Session state (per-browser-session, isolated by Streamlit already)
+# 4. Session State & Chat Rendering
 # ==================================================================
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "pending_prompt" not in st.session_state:
-    st.session_state.pending_prompt = None
-
-# ==================================================================
-# 5. Chat history + empty state
-# ==================================================================
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🎯"):
-        st.markdown(msg["content"])
-
-if not st.session_state.messages:
-    st.markdown(
-        '<div class="empty-hint">try one of these, or type your own below ↓</div>',
-        unsafe_allow_html=True,
-    )
-    c1, c2 = st.columns(2)
-    chips = [
-        (c1, "📋 Show Applications", "Show me all my applications"),
-        (c2, "📬 Check Gmail", "Check Gmail for any new application updates"),
-    ]
-    for col, label, prompt_text in chips:
-        with col:
-            if st.button(label, use_container_width=True, key=f"chip_{label}"):
-                st.session_state.pending_prompt = prompt_text
-
-# ==================================================================
-# 6. Agent execution with a live status log fed by real stdout
-# ==================================================================
-MAX_VISIBLE_LOG_LINES = 4
 
 
-def render_agent_status(placeholder, log_lines: list[str]) -> None:
-    if not log_lines:
-        current, history = "starting up", []
-    else:
-        current, history = log_lines[-1], log_lines[-MAX_VISIBLE_LOG_LINES:-1]
-
-    history_html = "".join(f'<div class="radar-log-dim">{line}</div>' for line in history)
-    placeholder.markdown(
-        textwrap.dedent(
-            f"""
-            <div class="radar-wrap">
-                <div class="radar">
-                    <div class="ring"></div><div class="ring"></div><div class="ring"></div>
-                    <div class="core"></div>
-                </div>
-                <div class="radar-log-block">
-                    {history_html}
-                    <div class="radar-log">{current}<span class="cursor"></span></div>
-                </div>
-            </div>
-            """
-        ),
-        unsafe_allow_html=True,
-    )
+def render_bubble(role: str, content: str, key: str):
+    # The CSS handles the left/right push automatically based on the key name!
+    with st.container(key=key):
+        st.markdown(content)
 
 
-def get_response(prompt: str) -> str:
-    log_queue: "queue.Queue[str]" = queue.Queue()
-    log_lines: list[str] = []
-    placeholder = st.empty()
-
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(run_agent_with_live_log, prompt, log_queue)
-
-        while not future.done():
-            try:
-                line = log_queue.get(timeout=0.1)
-                log_lines.append(line.strip())
-            except queue.Empty:
-                pass
-            render_agent_status(placeholder, log_lines)
-
-        # drain anything printed right before the future finished
-        while not log_queue.empty():
-            log_lines.append(log_queue.get().strip())
-
-        placeholder.empty()
-        return future.result()
+# Render past history
+for i, msg in enumerate(st.session_state.messages):
+    render_bubble(msg["role"], msg["content"], key=f"bubble-{msg['role']}-{i}")
 
 
 # ==================================================================
-# 7. Chat input
+# 5. Live Execution & Chat Input
 # ==================================================================
-typed_prompt = st.chat_input("Ask ApplyTrack AI to manage your applications...")
-prompt = typed_prompt or st.session_state.pending_prompt
-st.session_state.pending_prompt = None
+def render_terminal(placeholder, logs: list):
+    lines_html = "".join([f'<div class="terminal-line">>&nbsp;{html.escape(line)}</div>' for line in logs])
+    html_content = f"""
+    <div class="terminal-box">
+        <div class="terminal-header">
+            <div class="mac-dot red"></div>
+            <div class="mac-dot yellow"></div>
+            <div class="mac-dot green"></div>
+        </div>
+        <div class="terminal-body" id="term-body">
+            {lines_html}
+            <div class="terminal-line"><span class="terminal-cursor"></span></div>
+        </div>
+        <script>
+            var tb = document.getElementById("term-body");
+            if(tb) tb.scrollTop = tb.scrollHeight;
+        </script>
+    </div>
+    """
+    placeholder.html(html_content)
+
+
+def stream_final_response(text: str):
+    """Simulates a smooth typewriter effect for the final text output"""
+    for word in text.split(" "):
+        yield word + " "
+        time.sleep(0.03)
+
+
+prompt = st.chat_input("Tell ApplyTrack what you applied for today...")
 
 if prompt:
+    # 1. Append & render User message immediately
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="🧑‍💻"):
-        st.markdown(prompt)
+    render_bubble("user", prompt, key=f"bubble-user-{len(st.session_state.messages)}")
 
-    with st.chat_message("assistant", avatar="🎯"):
-        try:
-            response = get_response(prompt)
-        except Exception as e:
-            response = f"⚠️ Something went wrong: `{e}`"
-        st.markdown(response)
+    # 2. Setup Agent processing block aligned to the Left (Assistant side)
+    with st.container(key="terminal-wrapper"):
+        terminal_placeholder = st.empty()
 
-    st.session_state.messages.append({"role": "assistant", "content": response})
-    st.rerun()
+        log_queue = queue.Queue()
+        collected_logs = ["Initializing Tracker Agent..."]
+        render_terminal(terminal_placeholder, collected_logs)
+
+        # Run agent in background and capture live logs
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(run_agent_with_live_log, prompt, log_queue)
+
+            while not future.done():
+                try:
+                    # Get new log lines (non-blocking)
+                    line = log_queue.get(timeout=0.1)
+                    collected_logs.append(line)
+                    render_terminal(terminal_placeholder, collected_logs)
+                except queue.Empty:
+                    pass
+
+            final_response = future.result()
+
+        # 3. Cleanup terminal & stream the final response into a new chat bubble
+        terminal_placeholder.empty()
+
+    with st.container(key=f"bubble-assistant-{len(st.session_state.messages)}"):
+        st.write_stream(stream_final_response(final_response))
+
+    # 4. Save to state (no rerun needed because write_stream naturally displays it)
+    st.session_state.messages.append({"role": "assistant", "content": final_response})
